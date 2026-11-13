@@ -2,7 +2,9 @@
 name = "meshview"
 version = "0.2.0"
 edition = "2024"
-description = "Headless CPU rasterizer for comparing triangle meshes side by side"
+description = "Headless CPU rasterizer for comparing triangle meshes side by side: one shared orthographic camera, coverage masks, deterministic PNG sheets"
+authors = ["Ugo Garetto"]
+rust-version = "1.85"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/uvar-apps/meshview"
 readme = "README.md"
