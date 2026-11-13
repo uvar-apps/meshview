@@ -2,7 +2,8 @@
 
 use clap::Parser;
 use meshview::{
-    CompareItem, CompareOptions, load_obj, render_compare, write_png_gray, write_png_rgba,
+    CompareItem, CompareOptions, TexturedCompareItem, load_obj, load_textured, render_compare,
+    render_compare_textured, write_png_gray, write_png_rgba,
 };
 use std::path::Path;
 use std::process::ExitCode;
@@ -11,13 +12,13 @@ use std::process::ExitCode;
 /// or hex `#rgb` / `#rrggbb`.
 fn parse_bg(text: &str) -> Result<[u8; 3], String> {
     let lowered = text.trim().to_ascii_lowercase();
-    let named = match lowered.as_str() {
+    match lowered.as_str() {
         "black" => return Ok([0, 0, 0]),
         "white" => return Ok([255, 255, 255]),
         "gray" | "grey" => return Ok([128, 128, 128]),
-        other => other,
-    };
-    if let Some(hex) = named.strip_prefix('#') {
+        _ => {}
+    }
+    if let Some(hex) = lowered.strip_prefix('#') {
         let component = |c: &str| -> Result<u8, String> {
             u8::from_str_radix(c, 16).map_err(|_| format!("`{text}` is not a valid color"))
         };
@@ -35,7 +36,7 @@ fn parse_bg(text: &str) -> Result<[u8; 3], String> {
             _ => Err(format!("`{text}`: hex colors need 3 or 6 digits")),
         };
     }
-    if let Ok(v) = named.parse::<u8>() {
+    if let Ok(v) = lowered.parse::<u8>() {
         return Ok([v, v, v]);
     }
     Err(format!(
@@ -117,6 +118,12 @@ struct Args {
     /// PATH for a single mesh, PATH_<k>.png per tile for several
     #[arg(long)]
     mask: Option<String>,
+
+    /// Color covered pixels from material textures (`map_Kd` × Kd, modulated
+    /// by the same Lambert shading). Geometry, camera and coverage masks are
+    /// unchanged: texturing is presentation only.
+    #[arg(long)]
+    textured: bool,
 }
 
 fn parse_focus(text: &str) -> Option<[f64; 3]> {
@@ -160,27 +167,14 @@ fn mask_paths(path: &str, n: usize) -> Vec<String> {
         .collect()
 }
 
-fn run(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
-    if args.meshes.is_empty() {
-        return Err("no OBJ files given".into());
-    }
+fn compare_opts(args: &Args) -> Result<CompareOptions, Box<dyn std::error::Error>> {
     let focus = match &args.focus {
         Some(text) => {
             Some(parse_focus(text).ok_or(format!("--focus expects x,y,z, got `{text}`"))?)
         }
         None => None,
     };
-    let mut loaded = Vec::with_capacity(args.meshes.len());
-    for path in &args.meshes {
-        loaded.push(load_obj(path)?);
-    }
-    let names: Vec<String> = args.meshes.iter().map(|p| file_stem(p)).collect();
-    let items: Vec<CompareItem> = loaded
-        .iter()
-        .zip(&names)
-        .map(|(mesh, name)| CompareItem { name, mesh })
-        .collect();
-    let opts = CompareOptions {
+    Ok(CompareOptions {
         zoom: args.zoom,
         focus,
         size: args.size,
@@ -197,8 +191,10 @@ fn run(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
         background: args.bg,
         background_opacity: args.bg_opacity,
         ..Default::default()
-    };
-    let result = render_compare(&items, &opts)?;
+    })
+}
+
+fn finish(args: &Args, result: meshview::CompareResult) -> Result<(), Box<dyn std::error::Error>> {
     write_png_rgba(&args.out, &result.sheet)?;
     println!("wrote {}", args.out);
     if let Some(mask) = &args.mask {
@@ -211,6 +207,41 @@ fn run(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     Ok(())
+}
+
+fn run(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
+    if args.meshes.is_empty() {
+        return Err("no OBJ files given".into());
+    }
+    let names: Vec<String> = args.meshes.iter().map(|p| file_stem(p)).collect();
+    let opts = compare_opts(args)?;
+    if args.textured {
+        let loaded: Vec<meshview::TexturedMesh> = args
+            .meshes
+            .iter()
+            .map(|path| load_textured(path))
+            .collect::<Result<_, _>>()?;
+        let items: Vec<TexturedCompareItem> = loaded
+            .iter()
+            .zip(&names)
+            .map(|(mesh, name)| TexturedCompareItem { name, mesh })
+            .collect();
+        let result = render_compare_textured(&items, &opts)?;
+        finish(args, result)
+    } else {
+        let loaded: Vec<meshview::Mesh> = args
+            .meshes
+            .iter()
+            .map(|path| load_obj(path))
+            .collect::<Result<_, _>>()?;
+        let items: Vec<CompareItem> = loaded
+            .iter()
+            .zip(&names)
+            .map(|(mesh, name)| CompareItem { name, mesh })
+            .collect();
+        let result = render_compare(&items, &opts)?;
+        finish(args, result)
+    }
 }
 
 fn main() -> ExitCode {

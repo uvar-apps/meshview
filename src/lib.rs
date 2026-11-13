@@ -55,11 +55,13 @@ pub mod obj;
 pub mod raster;
 pub mod shading;
 pub mod sheet;
+pub mod texture;
 
 pub use camera::Camera;
-pub use obj::{Mesh, ObjError, load_obj, load_obj_from_str};
-pub use raster::{Raster, RenderOptions, render};
+pub use obj::{Mesh, ObjError, TexturedMesh, TriTex, load_obj, load_obj_from_str, load_textured};
+pub use raster::{Raster, RenderOptions, render, render_textured};
 pub use sheet::{
-    CompareItem, CompareOptions, CompareResult, SheetError, render_compare, write_png_gray,
-    write_png_rgba,
+    CompareItem, CompareOptions, CompareResult, SheetError, TexturedCompareItem, render_compare,
+    render_compare_textured, write_png_gray, write_png_rgba,
 };
+pub use texture::{Texture, TextureError};

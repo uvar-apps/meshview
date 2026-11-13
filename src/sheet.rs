@@ -73,6 +73,13 @@ pub struct CompareItem<'a> {
     pub mesh: &'a Mesh,
 }
 
+/// One textured panel's input: a display name and a [`TexturedMesh`] from
+/// [`load_textured`](crate::load_textured).
+pub struct TexturedCompareItem<'a> {
+    pub name: &'a str,
+    pub mesh: &'a crate::obj::TexturedMesh,
+}
+
 #[derive(Debug, Error)]
 pub enum SheetError {
     #[error("{path}: {source}")]
@@ -101,38 +108,93 @@ pub fn render_compare(
     items: &[CompareItem],
     opts: &CompareOptions,
 ) -> Result<CompareResult, SheetError> {
-    if items.is_empty() {
+    let names = validate_and_names(items.len(), opts, |k| items[k].name)?;
+    let cam = camera_for(opts, items[0].mesh.centroid());
+    let (aa, render_opts) = sheet_render_opts(opts);
+    let rasters: Vec<raster::Raster> = items
+        .iter()
+        .map(|item| raster::render(item.mesh, &cam, &render_opts))
+        .collect();
+    compose_sheet(&rasters, &names, aa, opts)
+}
+
+/// Like [`render_compare`], but each panel's covered pixels are colored from
+/// their material textures (`map_Kd` × Kd × Lambert). Geometry, camera and the
+/// coverage masks follow exactly the untextured rules — texturing changes
+/// presentation only.
+pub fn render_compare_textured(
+    items: &[TexturedCompareItem],
+    opts: &CompareOptions,
+) -> Result<CompareResult, SheetError> {
+    let names = validate_and_names(items.len(), opts, |k| items[k].name)?;
+    let cam = camera_for(opts, items[0].mesh.centroid());
+    let (aa, render_opts) = sheet_render_opts(opts);
+    let rasters: Vec<raster::Raster> = items
+        .iter()
+        .map(|item| raster::render_textured(item.mesh, &cam, &render_opts))
+        .collect();
+    compose_sheet(&rasters, &names, aa, opts)
+}
+
+fn validate_and_names<'a>(
+    n: usize,
+    opts: &'a CompareOptions,
+    name_of: impl Fn(usize) -> &'a str,
+) -> Result<Vec<&'a str>, SheetError> {
+    if n == 0 {
         return Err(SheetError::Empty);
     }
     if let Some(labels) = &opts.labels
-        && labels.len() < items.len()
+        && labels.len() < n
     {
         return Err(SheetError::LabelCount {
             count: labels.len(),
-            want: items.len(),
+            want: n,
         });
     }
-    let focus = opts.focus.unwrap_or_else(|| items[0].mesh.centroid());
-    let cam = Camera {
-        focus,
+    Ok((0..n)
+        .map(|k| match &opts.labels {
+            Some(labels) => labels[k].as_str(),
+            None => name_of(k),
+        })
+        .collect())
+}
+
+fn camera_for(opts: &CompareOptions, default_focus: [f64; 3]) -> Camera {
+    Camera {
+        focus: opts.focus.unwrap_or(default_focus),
         zoom: opts.zoom,
         yaw: opts.yaw,
         pitch: opts.pitch,
         roll: 0.0,
-    };
+    }
+}
 
+fn sheet_render_opts(opts: &CompareOptions) -> (usize, RenderOptions) {
     let aa = opts.aa.max(1);
-    let render_opts = RenderOptions {
-        size: opts.size * aa,
-        light: opts.light,
-        ambient: opts.ambient,
-    };
+    (
+        aa,
+        RenderOptions {
+            size: opts.size * aa,
+            light: opts.light,
+            ambient: opts.ambient,
+        },
+    )
+}
+
+/// Colorize, downscale, lay out and label — shared by both compare entry
+/// points so sheets differ only by their surface colors, never by framing.
+fn compose_sheet(
+    rasters: &[raster::Raster],
+    names: &[&str],
+    aa: usize,
+    opts: &CompareOptions,
+) -> Result<CompareResult, SheetError> {
     let bg_alpha = (opts.background_opacity.clamp(0.0, 1.0) * 255.0).round() as u8;
 
-    let mut tiles: Vec<RgbaImage> = Vec::with_capacity(items.len());
-    let mut masks: Vec<GrayImage> = Vec::with_capacity(items.len());
-    for item in items {
-        let raster = raster::render(item.mesh, &cam, &render_opts);
+    let mut tiles: Vec<RgbaImage> = Vec::with_capacity(rasters.len());
+    let mut masks: Vec<GrayImage> = Vec::with_capacity(rasters.len());
+    for raster in rasters {
         // Colourise at supersample resolution so both colour and alpha get
         // antialiased edges once filtered down.
         let big = raster.colorize(opts.background, bg_alpha);
@@ -146,7 +208,7 @@ pub fn render_compare(
                 opts.size as u32,
                 FilterType::Lanczos3,
             ));
-            masks.push(downsample_mask(&raster, opts.size, aa));
+            masks.push(downsample_mask(raster, opts.size, aa));
         }
     }
 
@@ -171,25 +233,17 @@ pub fn render_compare(
         let x = SHEET_PAD + c * (opts.size + SHEET_PAD);
         let y = SHEET_HEADER + SHEET_PAD + r * (opts.size + SHEET_HEADER);
         image::imageops::overlay(&mut sheet, tile, x as i64, y as i64);
-        let name = match &opts.labels {
-            Some(labels) => &labels[k],
-            None => item_name(items, k),
-        };
         draw_text(
             &mut sheet,
             x + 4,
             y.saturating_sub(18),
-            name,
+            names[k],
             LABEL_COLOR,
             LABEL_SCALE,
         );
     }
 
     Ok(CompareResult { sheet, masks })
-}
-
-fn item_name<'a>(items: &'a [CompareItem<'a>], k: usize) -> &'a str {
-    items[k].name
 }
 
 /// Collapse a supersampled coverage mask to `size`: a pixel is covered when a

@@ -12,8 +12,9 @@
 //! from "no surface here".
 
 use crate::camera::{Camera, project_mesh};
-use crate::obj::Mesh;
+use crate::obj::{Mesh, TexturedMesh, TriTex};
 use crate::shading::{DEFAULT_AMBIENT, DEFAULT_LIGHT, normalize, shade_two_sided_unit};
+use crate::texture::Texture;
 use image::{Rgba, RgbaImage};
 
 pub const DEFAULT_TILE_SIZE: usize = 900;
@@ -41,6 +42,13 @@ impl Default for RenderOptions {
     }
 }
 
+/// Per-triangle texture bindings for the shaded inner loop; borrowed slices
+/// parallel to the mesh's triangle list.
+struct TextureContext<'a> {
+    tri_tex: &'a [TriTex],
+    textures: &'a [Texture],
+}
+
 /// A square grayscale surface buffer plus the explicit coverage mask.
 ///
 /// The buffer holds only what the surface itself shades; uncovered pixels read
@@ -51,6 +59,7 @@ pub struct Raster {
     size: usize,
     gray: Vec<u8>,
     covered: Vec<bool>,
+    rgb: Option<Vec<u8>>,
 }
 
 impl Raster {
@@ -81,18 +90,27 @@ impl Raster {
             .expect("buffer sized to dimensions")
     }
 
-    /// Composite over a background: surface pixels become opaque gray,
-    /// uncovered pixels take `background` at `background_alpha` (255 = fully
-    /// opaque, 0 = transparent). Anti-aliasing this stage *before* downscaling
-    /// (`colorize` → `imageops::resize`) is what keeps edges correct,
-    /// including the alpha channel.
+    /// Composite over a background: surface pixels become opaque (gray, or
+    /// the textured RGB where a textured render produced one); uncovered
+    /// pixels take `background` at `background_alpha` (255 = fully opaque,
+    /// 0 = transparent). Anti-aliasing this stage *before* downscaling
+    /// (`colorize` → `imageops::resize`) is what keeps edges and alpha
+    /// correct.
     pub fn colorize(&self, background: [u8; 3], background_alpha: u8) -> RgbaImage {
         let mut out = RgbaImage::from_pixel(self.size as u32, self.size as u32, Rgba([0, 0, 0, 0]));
         for y in 0..self.size {
             for x in 0..self.size {
                 let p = if self.is_covered(x, y) {
-                    let g = self.pixel(x, y);
-                    Rgba([g, g, g, 255])
+                    match &self.rgb {
+                        Some(rgb) => {
+                            let j = (y * self.size + x) * 3;
+                            Rgba([rgb[j], rgb[j + 1], rgb[j + 2], 255])
+                        }
+                        None => {
+                            let g = self.pixel(x, y);
+                            Rgba([g, g, g, 255])
+                        }
+                    }
                 } else {
                     Rgba([
                         background[0],
@@ -125,12 +143,41 @@ const EPS: f64 = -1e-7;
 
 /// Shade `mesh` into a grayscale tile under `cam`.
 pub fn render(mesh: &Mesh, cam: &Camera, opts: &RenderOptions) -> Raster {
+    rasterize(mesh, cam, opts, None)
+}
+
+/// Like [`render`], but each covered pixel is additionally colored by its
+/// triangle's texture binding: sampled texel × material Kd, modulated by the
+/// same two-sided Lambert shade the grayscale pass computes.
+///
+/// The contract that keeps this honest: `gray`, `covered` and
+/// `mask_image` are byte-identical to `render` of the same mesh — texturing
+/// colors resolved pixels and can never open or close one.
+pub fn render_textured(mesh: &TexturedMesh, cam: &Camera, opts: &RenderOptions) -> Raster {
+    rasterize(
+        &mesh.mesh,
+        cam,
+        opts,
+        Some(TextureContext {
+            tri_tex: &mesh.tri_tex,
+            textures: &mesh.textures,
+        }),
+    )
+}
+
+fn rasterize(
+    mesh: &Mesh,
+    cam: &Camera,
+    opts: &RenderOptions,
+    texturing: Option<TextureContext<'_>>,
+) -> Raster {
     let size = opts.size;
     if size == 0 {
         return Raster {
             size: 0,
             gray: Vec::new(),
             covered: Vec::new(),
+            rgb: None,
         };
     }
     let pr = project_mesh(cam, mesh, size);
@@ -143,6 +190,7 @@ pub fn render(mesh: &Mesh, cam: &Camera, opts: &RenderOptions) -> Raster {
     let mut img = vec![0u8; size * size];
     let mut zbuf = vec![f64::NEG_INFINITY; size * size];
     let mut covered = vec![false; size * size];
+    let mut rgb = texturing.as_ref().map(|_| vec![0u8; size * size * 3]);
 
     // Cheap window reject: sort only the faces whose bbox touches the
     // viewport. Mean depth ascending — far faces first on a strict `z >`
@@ -189,6 +237,7 @@ pub fn render(mesh: &Mesh, cam: &Camera, opts: &RenderOptions) -> Raster {
         let x1 = (ceil_usize(maxx)).min(size - 1);
         let y1 = (ceil_usize(maxy)).min(size - 1);
 
+        let tt = texturing.as_ref().map(|ctx| &ctx.tri_tex[t as usize]);
         let d0 = depth[i0];
         let d1 = depth[i1];
         let d2 = depth[i2];
@@ -242,6 +291,30 @@ pub fn render(mesh: &Mesh, cam: &Camera, opts: &RenderOptions) -> Raster {
                 let shade =
                     shade_two_sided_unit([nx * inv_n, ny * inv_n, nz * inv_n], l, opts.ambient);
                 img[idx] = (255.0 * shade).clamp(0.0, 255.0) as u8;
+                if let (Some(rgb), Some(tt)) = (rgb.as_mut(), tt) {
+                    let tint = if let Some(slot) = tt.texture {
+                        let su = w0 * tt.uv[0][0] + w1 * tt.uv[1][0] + w2 * tt.uv[2][0];
+                        let tv = w0 * tt.uv[0][1] + w1 * tt.uv[1][1] + w2 * tt.uv[2][1];
+                        let texel = texturing
+                            .as_ref()
+                            .expect("ctx present when tt set")
+                            .textures[slot]
+                            .sample(su, tv);
+                        [
+                            texel[0] * tt.kd[0],
+                            texel[1] * tt.kd[1],
+                            texel[2] * tt.kd[2],
+                        ]
+                    } else if tt.shaded_by_material {
+                        [255.0 * tt.kd[0], 255.0 * tt.kd[1], 255.0 * tt.kd[2]]
+                    } else {
+                        [255.0, 255.0, 255.0]
+                    };
+                    let j = idx * 3;
+                    for k in 0..3 {
+                        rgb[j + k] = (tint[k] * shade).clamp(0.0, 255.0) as u8;
+                    }
+                }
             }
         }
     }
@@ -250,6 +323,7 @@ pub fn render(mesh: &Mesh, cam: &Camera, opts: &RenderOptions) -> Raster {
         size,
         gray: img,
         covered,
+        rgb,
     }
 }
 

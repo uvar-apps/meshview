@@ -25,8 +25,8 @@ usable; breaking it forces a semver bump and coordination.
 ## Status (as of this commit)
 
 * Repo: `github.com/uvar-apps/meshview`, branch `main`. Crate version: local
-  `0.2.1` — an objserde-backed loader, **unreleased**; crates.io still serves
-  `0.2.0`, which embedded its own parser.
+  `0.3.0` — objserde-backed loader + opt-in textured mode, **unreleased**;
+  crates.io serves `0.2.1` (objserde loader, no texturing).
 * crates.io: **`meshview 0.2.0` published** (2026-11-13). This was the first
   ever crates.io release — `0.1.0` exists only as a git tag + GitHub Release.
   crates.io versions cannot be deleted, only yanked.
@@ -85,6 +85,8 @@ meshview (lib + bin)
 ├── sheet.rs     render_compare() → RgbaImage sheet + per-tile masks
 │                supersample (render at size*aa, Lanczos3 down), layout,
 │                deterministic PNG writers (write_png_rgba / write_png_gray)
+├── texture.rs   texture decode (PNG/JPEG) + deterministic bilinear sampler
+│                (wrap fract, v-flip); colors covered pixels only
 ├── font.rs      built-in 5×7 ASCII bitmap atlas (no system fonts, deterministic)
 └── main.rs      clap CLI (--zoom/--focus/--size/--aa/--per-row/--label/
                  --yaw/--pitch/--ambient/--bg/--bg-opacity/--mask)

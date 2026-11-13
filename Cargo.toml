@@ -1,6 +1,6 @@
 [package]
 name = "meshview"
-version = "0.2.1"
+version = "0.3.0"
 edition = "2024"
 description = "Headless CPU rasterizer for comparing triangle meshes side by side: one shared orthographic camera, coverage masks, deterministic PNG sheets"
 authors = ["Ugo Garetto"]
@@ -18,7 +18,7 @@ exclude = ["assets/samples/stanford-bunny.obj", "assets/samples/xyzrgb_dragon.ob
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
-image = { version = "0.25", default-features = false, features = ["png"] }
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
 objserde = "0.2.0"
 thiserror = "2"
 

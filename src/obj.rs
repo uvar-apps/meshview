@@ -129,3 +129,145 @@ fn map_err(path: &str, e: objserde::ObjError) -> ObjError {
         },
     }
 }
+
+// ---------------------------------------------------------------------------
+// Textured mode: opt-in uv + material plumbing for render_textured.
+// ---------------------------------------------------------------------------
+
+use crate::texture::Texture;
+use std::collections::HashMap;
+
+/// Per-triangle texturing data, parallel to [`Mesh::indices`]. Corner order
+/// matches the triangle's indices exactly (the same fan walk `bind` uses).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TriTex {
+    /// Interpolated per-corner texture coordinates. Zero when the corners
+    /// carried no usable `vt`.
+    pub uv: [[f64; 2]; 3],
+    /// Slot into [`TexturedMesh::textures`]; `None` draws this triangle with
+    /// the flat diffuse tint only.
+    pub texture: Option<usize>,
+    /// Material diffuse (Kd) in 0..=1 per channel; white when unset.
+    /// Multiplies the sampled texel (or stands in for one).
+    pub kd: [f64; 3],
+    /// False when no material was in effect at this face — the surface then
+    /// renders exactly like the grayscale path, so turning texturing on for
+    /// an untextured mesh changes nothing but the container.
+    pub shaded_by_material: bool,
+}
+
+/// A [`Mesh`] plus the per-triangle texture bindings [`load_textured`] built
+/// beside it. Geometry, normals and coverage are untouched: texturing colors
+/// pixels, never visibility.
+#[derive(Clone, Debug, PartialEq)]
+pub struct TexturedMesh {
+    pub mesh: Mesh,
+    pub tri_tex: Vec<TriTex>,
+    pub textures: Vec<Texture>,
+}
+
+impl TexturedMesh {
+    pub fn vertex_count(&self) -> usize {
+        self.mesh.vertex_count()
+    }
+
+    pub fn face_count(&self) -> usize {
+        self.mesh.face_count()
+    }
+
+    pub fn centroid(&self) -> [f64; 3] {
+        self.mesh.centroid()
+    }
+}
+
+/// Load a mesh with its texture coordinates and resolved material textures.
+/// `mtllib` files are read by objserde relative to `path`; `map_Kd` file
+/// paths (including Windows `\` spellings) are resolved against the same
+/// directory and decoded once, deduplicated. A texture that fails to decode
+/// leaves its triangles on the flat Kd tint — never a hard error, mirroring
+/// how a missing `.mtl` does not fail the load.
+pub fn load_textured(path: &str) -> Result<TexturedMesh, ObjError> {
+    let obj = objserde::parse_file(path).map_err(|e| map_err(path, e))?;
+    let base = std::path::Path::new(path)
+        .parent()
+        .map(|p| p.to_path_buf())
+        .unwrap_or_default();
+    let mesh = to_mesh(obj.bind());
+
+    let mut tri_tex: Vec<TriTex> = Vec::with_capacity(mesh.indices.len());
+    let mut textures: Vec<Texture> = Vec::new();
+    let mut slots: HashMap<String, Option<usize>> = HashMap::new();
+
+    for face in &obj.faces {
+        let material = obj.material_of(face);
+        let kd = material.and_then(|m| m.diffuse).unwrap_or([1.0, 1.0, 1.0]);
+        let shaded = material.is_some();
+        let map = material
+            .and_then(|m| m.diffuse_map())
+            .map(|m| normalize_map_path(&m.path));
+        for tri in face.triangulate() {
+            let mut uv = [[0.0; 2]; 3];
+            let mut have_uv = true;
+            for (slot, corner) in uv.iter_mut().zip(tri.corners) {
+                match corner
+                    .vt
+                    .and_then(|i| obj.tex_coords.get(i as usize))
+                    .filter(|tc| tc.arity >= 2)
+                {
+                    Some(tc) => *slot = [tc.components[0], tc.components[1]],
+                    None => have_uv = false,
+                }
+            }
+            let texture = if have_uv {
+                map.as_deref().and_then(|name| match slots.get(name) {
+                    Some(known) => *known,
+                    None => {
+                        let full = base.join(name);
+                        let full_str = full.to_string_lossy().into_owned();
+                        match Texture::load(&full_str) {
+                            Ok(t) => {
+                                let idx = textures.len();
+                                textures.push(t);
+                                slots.insert(name.to_string(), Some(idx));
+                                Some(idx)
+                            }
+                            Err(_) => {
+                                slots.insert(name.to_string(), None);
+                                None
+                            }
+                        }
+                    }
+                })
+            } else {
+                None
+            };
+            tri_tex.push(TriTex {
+                uv,
+                texture: texture.filter(|_| have_uv),
+                kd,
+                shaded_by_material: shaded,
+            });
+        }
+    }
+    debug_assert_eq!(tri_tex.len(), mesh.indices.len());
+    Ok(TexturedMesh {
+        mesh,
+        tri_tex,
+        textures,
+    })
+}
+
+/// `.\tex.jpg` and `./tex.jpg` both name `tex.jpg` beside the OBJ; deeper
+/// relative paths keep their (forward-slashed) shape.
+fn normalize_map_path(raw: &str) -> String {
+    let unified = raw.replace('\\', "/");
+    let mut s = unified.as_str();
+    loop {
+        let next = s.strip_prefix("./").unwrap_or(s);
+        if next == s {
+            break;
+        }
+        s = next;
+    }
+    s.to_string()
+}
