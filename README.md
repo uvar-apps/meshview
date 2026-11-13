@@ -107,14 +107,34 @@ meshview::write_png_rgba("cmp.png", &sheet.sheet)?;  // deterministic bytes
 
 ```
 meshview [MESHES]... -o out.png [--zoom F] [--focus x,y,z] [--size N] [--aa N]
-         [--per-row N] [--label S]... [--yaw F] [--pitch F] [--ambient F] [--mask PATH]
+         [--per-row N] [--label S]... [--yaw F] [--pitch F] [--ambient F]
+         [--bg COLOR] [--bg-opacity F] [--textured] [--mask PATH]
 ```
 
 Defaults: `zoom 100`, `size 620`, `aa 2`, `ambient 0.30`, `per-row 0` (one
-row), no focus (= first mesh's centroid), `yaw/pitch 0`. Deterministic PNG
-bytes for identical inputs and options (fixed encoder settings, no metadata
-or timestamps). `--mask PATH` writes each tile's coverage mask beside the
-sheet (`PATH.png` for one mesh, `PATH_<k>.png` per tile for several).
+row), no focus (= first mesh's centroid), `yaw/pitch 0`, `--bg black`,
+`--bg-opacity 1`. Deterministic PNG bytes for identical inputs and options
+(fixed encoder settings, no metadata or timestamps); sheets are RGBA.
+
+* `--bg` colours everything the surface does not cover (tiles and sheet
+  margins): `black`/`white`/`gray`, a gray level `0..=255`, or
+  `#rgb`/`#rrggbb`. The default changed from the Python original's white 255
+  to black in 0.2.0 — pass `--bg white` for its look.
+* `--bg-opacity 0..1` sets the alpha of every non-surface pixel; `0` gives a
+  fully transparent background. Surface pixels stay opaque, and edge alpha
+  antialiases because colourisation happens before the supersample downscale.
+* `--textured` colors covered pixels from the mesh's own material textures:
+  `map_Kd` images (PNG/JPEG) resolved next to the OBJ via `mtllib`, sampled
+  bilinear with wrapped repeat UVs, multiplied by the material Kd, modulated
+  by the same two-sided Lambert shading. Geometry, camera, **visibility and
+  coverage masks are bit-identical to the untextured render** — texturing is
+  presentation only, asserted by the test
+  `texturing_cannot_open_or_close_a_pixel`. Meshes without `vt`/materials
+  render unchanged through the same path. Live demo:
+  [`examples/textured_demo.sh`](examples/textured_demo.sh).
+* `--mask PATH` writes each tile's coverage mask beside the sheet
+  (`PATH.png` for one mesh, `PATH_<k>.png` per tile for several) — the mask
+  stays ground truth regardless of the colours you composite over it.
 
 The sample assets intentionally span incompatible unit scales, so the correct
 per-mesh invocations live in [`examples/render_samples.sh`](examples/render_samples.sh);
