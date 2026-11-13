@@ -24,9 +24,9 @@ usable; breaking it forces a semver bump and coordination.
 
 ## Status (as of this commit)
 
-* Repo: `github.com/uvar-apps/meshview`, branch `main`. Crate version: local
-  `0.3.0` — objserde-backed loader + opt-in textured mode, **unreleased**;
-  crates.io serves `0.2.1` (objserde loader, no texturing).
+* Repo: `github.com/uvar-apps/meshview`, branch `main`. Crate version:
+  `0.3.0` — objserde-backed loader + opt-in textured mode; published to
+  crates.io and tagged/released on GitHub (2026-11-13).
 * crates.io: **`meshview 0.2.0` published** (2026-11-13). This was the first
   ever crates.io release — `0.1.0` exists only as a git tag + GitHub Release.
   crates.io versions cannot be deleted, only yanked.
@@ -38,7 +38,7 @@ usable; breaking it forces a semver bump and coordination.
   and MIT OR Apache-2.0 licence; behaviour verified byte-identical against the
   in-tree loader it replaced). Adding any other dependency is a deliberate
   decision, see rules.
-* Tests: **35 green** (13 ported Python `selftest.py` property checks; 8
+* Tests: **40 green, 1 env-gated ignore** (13 ported Python `selftest.py` property checks; 8
   loader/sample tests; 7 render/compositing integration tests; CLI e2e;
   `bg`/`focus`/mask-naming unit tests; font atlas; doctest).
   `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings`,
