@@ -1,0 +1,5 @@
+/target
+*.png
+.mimocode/
+/meshview-prompt.md
+/meshview-samples/
