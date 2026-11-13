@@ -39,6 +39,10 @@ echo "# crambin SES crevice close-up — the region meshview was built to inspec
 "$MV" "$S/1crn_ses_0.5A.obj"    -o "$OUT/1crn_crevice.png" \
     --zoom 110 --focus 4.29,5.05,4.55 --size 900 --aa 2 --label "crevice @ (4.29, 5.05, 4.55)"
 
+echo "# Transparent background for compositing into other material (alpha 0)"
+"$MV" "$S/1crn_ses_0.5A.obj"    -o "$OUT/1crn_transparent.png" \
+    --zoom 110 --focus 4.29,5.05,4.55 --size 900 --aa 2 --bg-opacity 0
+
 echo "# Self-compare sanity check: the same file twice must produce identical panels"
 "$MV" "$S/1crn_ses_0.5A.obj" "$S/1crn_ses_0.5A.obj" \
     -o "$OUT/1crn_selfcompare.png" --zoom 110 --focus 4.29,5.05,4.55 --size 620 \

@@ -14,8 +14,12 @@
 use crate::camera::{Camera, project_mesh};
 use crate::obj::Mesh;
 use crate::shading::{DEFAULT_AMBIENT, DEFAULT_LIGHT, normalize, shade_two_sided_unit};
+use image::{Rgba, RgbaImage};
 
 pub const DEFAULT_TILE_SIZE: usize = 900;
+
+/// Default background for rendered output: black.
+pub const DEFAULT_BACKGROUND: [u8; 3] = [0, 0, 0];
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct RenderOptions {
@@ -25,8 +29,6 @@ pub struct RenderOptions {
     pub light: [f64; 3],
     /// Constant ambient floor for the Lambert term, 0..1.
     pub ambient: f64,
-    /// Background gray level; 255 (white) in the Python original.
-    pub background: u8,
 }
 
 impl Default for RenderOptions {
@@ -35,12 +37,15 @@ impl Default for RenderOptions {
             size: DEFAULT_TILE_SIZE,
             light: DEFAULT_LIGHT,
             ambient: DEFAULT_AMBIENT,
-            background: 255,
         }
     }
 }
 
-/// A square grayscale pixel buffer plus the explicit coverage mask.
+/// A square grayscale surface buffer plus the explicit coverage mask.
+///
+/// The buffer holds only what the surface itself shades; uncovered pixels read
+/// 0 and are not meaningful until you composite a background with
+/// [`Raster::colorize`] (background colour and opacity choices live there).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Raster {
     size: usize,
@@ -53,6 +58,8 @@ impl Raster {
         self.size
     }
 
+    /// Shaded surface level at `(x, y)`; only meaningful where
+    /// [`is_covered`](Self::is_covered) is true.
     #[inline]
     pub fn pixel(&self, x: usize, y: usize) -> u8 {
         self.gray[y * self.size + x]
@@ -67,10 +74,37 @@ impl Raster {
         self.covered.iter().filter(|c| **c).count()
     }
 
-    /// The pixels as an 8-bit grayscale image.
+    /// The raw surface layer as an 8-bit grayscale image: shaded pixels where
+    /// geometry covered, 0 elsewhere. For pictures use [`colorize`](Self::colorize).
     pub fn gray_image(&self) -> image::GrayImage {
         image::GrayImage::from_raw(self.size as u32, self.size as u32, self.gray.clone())
             .expect("buffer sized to dimensions")
+    }
+
+    /// Composite over a background: surface pixels become opaque gray,
+    /// uncovered pixels take `background` at `background_alpha` (255 = fully
+    /// opaque, 0 = transparent). Anti-aliasing this stage *before* downscaling
+    /// (`colorize` → `imageops::resize`) is what keeps edges correct,
+    /// including the alpha channel.
+    pub fn colorize(&self, background: [u8; 3], background_alpha: u8) -> RgbaImage {
+        let mut out = RgbaImage::from_pixel(self.size as u32, self.size as u32, Rgba([0, 0, 0, 0]));
+        for y in 0..self.size {
+            for x in 0..self.size {
+                let p = if self.is_covered(x, y) {
+                    let g = self.pixel(x, y);
+                    Rgba([g, g, g, 255])
+                } else {
+                    Rgba([
+                        background[0],
+                        background[1],
+                        background[2],
+                        background_alpha,
+                    ])
+                };
+                out.put_pixel(x as u32, y as u32, p);
+            }
+        }
+        out
     }
 
     /// The coverage mask as a grayscale image: 255 where geometry covers,
@@ -106,7 +140,7 @@ pub fn render(mesh: &Mesh, cam: &Camera, opts: &RenderOptions) -> Raster {
     let nview = &pr.nview;
     let l = normalize(opts.light);
 
-    let mut img = vec![opts.background; size * size];
+    let mut img = vec![0u8; size * size];
     let mut zbuf = vec![f64::NEG_INFINITY; size * size];
     let mut covered = vec![false; size * size];
 

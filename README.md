@@ -86,9 +86,15 @@ let out = render(&mesh, &cam, &RenderOptions { size: 900, ..Default::default() }
 let holes = /* flood-fill over out's mask — see tests/common/mod.rs */;
 let sheet = render_compare(
     &[CompareItem { name: "ref", mesh: &mesh }, CompareItem { name: "ours", mesh: &other }],
-    &CompareOptions { zoom: 110.0, focus: Some([4.29, 5.05, 4.55]), ..Default::default() },
+    &CompareOptions {
+        zoom: 110.0,
+        focus: Some([4.29, 5.05, 4.55]),
+        background: [0, 0, 0],        // or any colour…
+        background_opacity: 0.0,      // …at any alpha (0 = transparent)
+        ..Default::default()
+    },
 )?;
-meshview::write_png_rgb("cmp.png", &sheet.sheet)?;   // deterministic bytes
+meshview::write_png_rgba("cmp.png", &sheet.sheet)?;  // deterministic bytes
 ```
 
 ## CLI

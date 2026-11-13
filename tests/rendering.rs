@@ -7,7 +7,7 @@ mod common;
 use common::sample;
 use meshview::{
     Camera, CompareItem, CompareOptions, Mesh, RenderOptions, load_obj, render, render_compare,
-    write_png_gray, write_png_rgb,
+    write_png_gray, write_png_rgba,
 };
 
 fn tmp(name: &str) -> String {
@@ -122,11 +122,91 @@ fn covered_pixel_can_equal_background_byte() {
         let covered = r.is_covered(32, 32);
         assert!(covered, "{name}: centre must be covered");
     }
-    // With upright light the fully lit pixel reads exactly 255 — the same
-    // byte as the background. The mask is what distinguishes them.
+    // With upright light the fully lit pixel reads exactly 255 — and over a
+    // white background it is byte-identical to "no surface here". Only the
+    // mask distinguishes them.
     assert_eq!(lit.pixel(32, 32), 255, "lit pixel must saturate to 255");
     assert!(lit.is_covered(32, 32));
     assert!(!lit.is_covered(2, 2), "corner outside triangle uncovered");
+    let on_white = lit.colorize([255, 255, 255], 255);
+    assert_eq!(on_white.get_pixel(32, 32).0, [255, 255, 255, 255]);
+    assert_eq!(on_white.get_pixel(2, 2).0, [255, 255, 255, 255]);
+    assert!(
+        lit.is_covered(32, 32) && !lit.is_covered(2, 2),
+        "mask is the only truth when surface and background share a byte value"
+    );
+}
+
+// Background colour and opacity: black default, arbitrary colour, and a
+// transparent canvas in which surface stays fully opaque.
+#[test]
+fn background_colour_and_alpha() {
+    let mesh = mesh_with_triangle();
+    let cam = Camera::new([0.0, 0.0, 0.0], 50.0);
+    let lit = render(
+        &mesh,
+        &cam,
+        &RenderOptions {
+            size: 64,
+            light: [0.0, 0.0, 1.0],
+            ..Default::default()
+        },
+    );
+    // Opaque black (the default): corner carries the colour, centre the surface.
+    let black = lit.colorize(crate_default_bg(), 255);
+    assert_eq!(black.get_pixel(2, 2).0, [0, 0, 0, 255]);
+    assert_eq!(black.get_pixel(32, 32).0, [255, 255, 255, 255]);
+    // Fully transparent: uncovered pixels hold alpha 0, surface alpha 255.
+    let glass = lit.colorize([10, 20, 30], 0);
+    assert_eq!(glass.get_pixel(2, 2).0, [10, 20, 30, 0]);
+    assert_eq!(glass.get_pixel(32, 32).0, [255, 255, 255, 255]);
+    // A compare sheet at opacity 0 embeds that alpha in the PNG itself.
+    let items = vec![CompareItem {
+        name: "t",
+        mesh: &mesh,
+    }];
+    let res = render_compare(
+        &items,
+        &CompareOptions {
+            zoom: 50.0,
+            focus: Some([0.0, 0.0, 0.0]),
+            size: 64,
+            aa: 1,
+            light: [0.0, 0.0, 1.0],
+            background: [10, 20, 30],
+            background_opacity: 0.0,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    // Sheet margin pixel: same transparent background.
+    assert_eq!(res.sheet.get_pixel(1, 1).0, [10, 20, 30, 0]);
+    // Deep inside the triangle (well away from antialiased edges): opaque
+    // white surface.
+    assert_eq!(
+        res.sheet.get_pixel(12 + 32, 38 + 40).0,
+        [255, 255, 255, 255]
+    );
+    // Deep background inside the tile: fully transparent in both channels.
+    assert_eq!(res.sheet.get_pixel(12 + 2, 38 + 2).0, [10, 20, 30, 0]);
+    // And a round trip through the encoder preserves alpha.
+    let path = tmp("alpha.png");
+    meshview::write_png_rgba(&path, &res.sheet).unwrap();
+    let back = image::open(&path).unwrap().to_rgba8();
+    assert_eq!(back.get_pixel(1, 1).0, [10, 20, 30, 0]);
+    std::fs::remove_file(&path).ok();
+}
+
+fn mesh_with_triangle() -> meshview::Mesh {
+    meshview::Mesh {
+        positions: vec![[-0.3, -0.3, 0.0], [0.3, -0.3, 0.0], [0.0, 0.3, 0.0]],
+        normals: vec![[0.0, 0.0, -1.0]; 3],
+        indices: vec![[0, 1, 2]],
+    }
+}
+
+fn crate_default_bg() -> [u8; 3] {
+    meshview::raster::DEFAULT_BACKGROUND
 }
 
 // The mask PNG round-trips and agrees with the renderer's coverage.
@@ -177,9 +257,9 @@ fn sheet_png_is_byte_deterministic() {
     let a = tmp("det_a.png");
     let b = tmp("det_b.png");
     let r1 = render_compare(&items, &opts).unwrap();
-    write_png_rgb(&a, &r1.sheet).unwrap();
+    write_png_rgba(&a, &r1.sheet).unwrap();
     let r2 = render_compare(&items, &opts).unwrap();
-    write_png_rgb(&b, &r2.sheet).unwrap();
+    write_png_rgba(&b, &r2.sheet).unwrap();
     assert_eq!(std::fs::read(&a).unwrap(), std::fs::read(&b).unwrap());
     std::fs::remove_file(&a).ok();
     std::fs::remove_file(&b).ok();
@@ -256,7 +336,7 @@ fn shared_camera_does_not_auto_fit() {
     let ta = tile(&a);
     let tb = tile(&b);
     let tc = tile(&c);
-    let nonbg = |tile: &Vec<image::Rgb<u8>>| tile.iter().filter(|p| p.0 != [255, 255, 255]).count();
+    let nonbg = |tile: &Vec<image::Rgba<u8>>| tile.iter().filter(|p| p.0 != [0, 0, 0, 255]).count();
     // Panel A shows surface; panel B (same fixed region, mesh far away) is
     // empty — no auto-fit re-framed it.
     assert!(nonbg(&ta) > 5_000, "reference panel should show protein");

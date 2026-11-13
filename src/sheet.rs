@@ -12,14 +12,13 @@ use crate::obj::Mesh;
 use crate::raster::{self, RenderOptions};
 use image::ImageEncoder as _;
 use image::imageops::FilterType;
-use image::{GrayImage, Rgb, RgbImage};
+use image::{GrayImage, Rgba, RgbaImage};
 use thiserror::Error;
 
 pub const DEFAULT_SHEET_SIZE: usize = 620;
 pub const SHEET_PAD: usize = 12;
 pub const SHEET_HEADER: usize = 26;
-pub const SHEET_BG: Rgb<u8> = Rgb([248, 248, 248]);
-pub const LABEL_COLOR: Rgb<u8> = Rgb([200, 0, 0]);
+pub const LABEL_COLOR: Rgba<u8> = Rgba([200, 0, 0, 255]);
 const LABEL_SCALE: usize = 2;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -40,6 +39,13 @@ pub struct CompareOptions {
     pub pitch: f64,
     pub ambient: f64,
     pub light: [f64; 3],
+    /// Background colour behind every tile and the sheet canvas.
+    pub background: [u8; 3],
+    /// Background opacity, 0..1: the alpha of uncovered pixels in the output
+    /// PNG. 0 gives a fully transparent background; surface pixels are always
+    /// opaque. Edge pixels inherit antialiased alpha because colourisation
+    /// happens before the supersample downscale.
+    pub background_opacity: f64,
 }
 
 impl Default for CompareOptions {
@@ -55,6 +61,8 @@ impl Default for CompareOptions {
             pitch: 0.0,
             ambient: crate::shading::DEFAULT_AMBIENT,
             light: crate::shading::DEFAULT_LIGHT,
+            background: crate::raster::DEFAULT_BACKGROUND,
+            background_opacity: 1.0,
         }
     }
 }
@@ -80,9 +88,11 @@ pub enum SheetError {
     Encode(String),
 }
 
-/// The composed sheet plus, per tile, a `size`×`size` coverage mask at 0/255.
+/// The composed RGBA sheet plus, per tile, a `size`×`size` coverage mask at
+/// 0/255. The sheet carries the background's alpha channel; surface pixels
+/// are always opaque.
 pub struct CompareResult {
-    pub sheet: RgbImage,
+    pub sheet: RgbaImage,
     pub masks: Vec<GrayImage>,
 }
 
@@ -116,18 +126,20 @@ pub fn render_compare(
         size: opts.size * aa,
         light: opts.light,
         ambient: opts.ambient,
-        background: 255,
     };
+    let bg_alpha = (opts.background_opacity.clamp(0.0, 1.0) * 255.0).round() as u8;
 
-    let mut tiles: Vec<GrayImage> = Vec::with_capacity(items.len());
+    let mut tiles: Vec<RgbaImage> = Vec::with_capacity(items.len());
     let mut masks: Vec<GrayImage> = Vec::with_capacity(items.len());
     for item in items {
         let raster = raster::render(item.mesh, &cam, &render_opts);
+        // Colourise at supersample resolution so both colour and alpha get
+        // antialiased edges once filtered down.
+        let big = raster.colorize(opts.background, bg_alpha);
         if aa == 1 {
-            tiles.push(raster.gray_image());
+            tiles.push(big);
             masks.push(raster.mask_image());
         } else {
-            let big = raster.gray_image();
             tiles.push(image::imageops::resize(
                 &big,
                 opts.size as u32,
@@ -143,17 +155,22 @@ pub fn render_compare(
     let rows = n.div_ceil(cols);
     let sheet_w = cols * opts.size + (cols + 1) * SHEET_PAD;
     let sheet_h = rows * (opts.size + SHEET_HEADER) + SHEET_PAD;
-    let mut sheet = RgbImage::from_pixel(sheet_w as u32, sheet_h as u32, SHEET_BG);
+    let mut sheet = RgbaImage::from_pixel(
+        sheet_w as u32,
+        sheet_h as u32,
+        Rgba([
+            opts.background[0],
+            opts.background[1],
+            opts.background[2],
+            bg_alpha,
+        ]),
+    );
 
     for (k, tile) in tiles.iter().enumerate() {
         let (r, c) = ((k / cols), k % cols);
         let x = SHEET_PAD + c * (opts.size + SHEET_PAD);
         let y = SHEET_HEADER + SHEET_PAD + r * (opts.size + SHEET_HEADER);
-        let rgb = RgbImage::from_fn(tile.width(), tile.height(), |x, y| {
-            let v = tile.get_pixel(x, y)[0];
-            Rgb([v, v, v])
-        });
-        image::imageops::overlay(&mut sheet, &rgb, x as i64, y as i64);
+        image::imageops::overlay(&mut sheet, tile, x as i64, y as i64);
         let name = match &opts.labels {
             Some(labels) => &labels[k],
             None => item_name(items, k),
@@ -199,17 +216,18 @@ fn downsample_mask(raster: &raster::Raster, size: usize, aa: usize) -> GrayImage
 
 /// Deterministic PNG writer: fixed compression and filter settings, no
 /// metadata or time chunks, so identical inputs produce identical bytes.
-pub fn write_png_rgb(path: &str, img: &RgbImage) -> Result<(), SheetError> {
+/// The sheet is RGBA, so transparent backgrounds survive the round trip.
+pub fn write_png_rgba(path: &str, img: &RgbaImage) -> Result<(), SheetError> {
     write_png(
         path,
         img.as_raw(),
         img.width(),
         img.height(),
-        image::ExtendedColorType::Rgb8,
+        image::ExtendedColorType::Rgba8,
     )
 }
 
-/// Deterministic grayscale PNG writer. See [`write_png_rgb`].
+/// Deterministic grayscale PNG writer (coverage masks). See [`write_png_rgba`].
 pub fn write_png_gray(path: &str, img: &GrayImage) -> Result<(), SheetError> {
     write_png(
         path,

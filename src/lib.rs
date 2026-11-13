@@ -25,10 +25,12 @@
 //!    re-normalized because exported normals are not always unit length. See
 //!    [`load_obj`].
 //! 3. **Coverage is an explicit boolean mask returned by the renderer, never
-//!    inferred from pixel values.** A fully lit surface pixel reads exactly
-//!    255, which equals the background; colour alone cannot tell "brightest
-//!    pixel" from "no surface here" — a hole-check that conflated them once
-//!    reported 3,208 fake holes on a flawless sphere. See [`Raster`].
+//!    inferred from pixel values.** With the Python original's white
+//!    background, a fully lit surface pixel read exactly 255 — the same byte
+//!    as "no surface here"; a hole-check that conflated them once reported
+//!    3,208 fake holes on a flawless sphere. The same collision can recur for
+//!    *any* background (`--bg`), so every hole claim goes through the mask.
+//!    See [`Raster`] and [`Raster::colorize`].
 //! 4. **One camera for the whole sheet.** `focus` (the world point placed at
 //!    the tile centre) and `zoom` (pixels per world unit) are shared by all
 //!    meshes in a compare run; with no focus, the first mesh's centroid is
@@ -59,5 +61,5 @@ pub use obj::{Mesh, ObjError, load_obj, load_obj_from_str};
 pub use raster::{Raster, RenderOptions, render};
 pub use sheet::{
     CompareItem, CompareOptions, CompareResult, SheetError, render_compare, write_png_gray,
-    write_png_rgb,
+    write_png_rgba,
 };

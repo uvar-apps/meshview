@@ -106,14 +106,14 @@ pub const GLYPH_H: usize = 7;
 /// Blank inter-character column(s) inside the cell advance.
 pub const CELL_ADVANCE: usize = 6;
 
-/// Draw `text` onto an RGB image with its top-left at `(x, y)`. ASCII only;
+/// Draw `text` onto an RGBA image with its top-left at `(x, y)`. ASCII only;
 /// characters outside the atlas print as `?` so mis-encoding is visible.
 pub(crate) fn draw_text(
-    img: &mut image::RgbImage,
+    img: &mut image::RgbaImage,
     x: usize,
     y: usize,
     text: &str,
-    color: image::Rgb<u8>,
+    color: image::Rgba<u8>,
     scale: usize,
 ) {
     let scale = scale.max(1);
@@ -137,10 +137,10 @@ pub(crate) fn draw_text(
 }
 
 fn fill_scale_rect(
-    img: &mut image::RgbImage,
+    img: &mut image::RgbaImage,
     x: usize,
     y: usize,
-    color: image::Rgb<u8>,
+    color: image::Rgba<u8>,
     scale: usize,
 ) {
     for dy in 0..scale {

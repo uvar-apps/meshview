@@ -2,10 +2,56 @@
 
 use clap::Parser;
 use meshview::{
-    CompareItem, CompareOptions, load_obj, render_compare, write_png_gray, write_png_rgb,
+    CompareItem, CompareOptions, load_obj, render_compare, write_png_gray, write_png_rgba,
 };
 use std::path::Path;
 use std::process::ExitCode;
+
+/// Parse a background colour: `black`/`white`/`gray`, a gray level `0..=255`,
+/// or hex `#rgb` / `#rrggbb`.
+fn parse_bg(text: &str) -> Result<[u8; 3], String> {
+    let lowered = text.trim().to_ascii_lowercase();
+    let named = match lowered.as_str() {
+        "black" => return Ok([0, 0, 0]),
+        "white" => return Ok([255, 255, 255]),
+        "gray" | "grey" => return Ok([128, 128, 128]),
+        other => other,
+    };
+    if let Some(hex) = named.strip_prefix('#') {
+        let component = |c: &str| -> Result<u8, String> {
+            u8::from_str_radix(c, 16).map_err(|_| format!("`{text}` is not a valid color"))
+        };
+        return match hex.len() {
+            3 => Ok([
+                component(&hex[0..1])? * 17,
+                component(&hex[1..2])? * 17,
+                component(&hex[2..3])? * 17,
+            ]),
+            6 => Ok([
+                component(&hex[0..2])?,
+                component(&hex[2..4])?,
+                component(&hex[4..6])?,
+            ]),
+            _ => Err(format!("`{text}`: hex colors need 3 or 6 digits")),
+        };
+    }
+    if let Ok(v) = named.parse::<u8>() {
+        return Ok([v, v, v]);
+    }
+    Err(format!(
+        "`{text}`: expected black/white/gray, a gray level 0..=255, or #rgb/#rrggbb"
+    ))
+}
+
+fn parse_opacity(text: &str) -> Result<f64, String> {
+    let v: f64 = text
+        .parse()
+        .map_err(|_| format!("`{text}` is not a number"))?;
+    if !(0.0..=1.0).contains(&v) {
+        return Err(format!("--bg-opacity must be within 0..=1, got {text}"));
+    }
+    Ok(v)
+}
 
 #[derive(Parser, Debug)]
 #[command(
@@ -56,6 +102,16 @@ struct Args {
     /// Constant ambient, 0..1
     #[arg(long, default_value_t = 0.30)]
     ambient: f64,
+
+    /// Background colour: black|white|gray, a gray level 0..=255, or
+    /// #rgb/#rrggbb (default black)
+    #[arg(long, default_value = "black", value_parser = parse_bg)]
+    bg: [u8; 3],
+
+    /// Background opacity 0..1; 0 makes the background fully transparent.
+    /// Rendered surface stays opaque.
+    #[arg(long, default_value_t = 1.0, value_parser = parse_opacity)]
+    bg_opacity: f64,
 
     /// Write each tile's coverage mask as a grayscale PNG beside the sheet:
     /// PATH for a single mesh, PATH_<k>.png per tile for several
@@ -138,10 +194,12 @@ fn run(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
         yaw: args.yaw,
         pitch: args.pitch,
         ambient: args.ambient,
+        background: args.bg,
+        background_opacity: args.bg_opacity,
         ..Default::default()
     };
     let result = render_compare(&items, &opts)?;
-    write_png_rgb(&args.out, &result.sheet)?;
+    write_png_rgba(&args.out, &result.sheet)?;
     println!("wrote {}", args.out);
     if let Some(mask) = &args.mask {
         for (mask_path, m) in mask_paths(mask, result.masks.len())
@@ -169,6 +227,25 @@ fn main() -> ExitCode {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn bg_parsing() {
+        assert_eq!(parse_bg("black").unwrap(), [0, 0, 0]);
+        assert_eq!(parse_bg("white").unwrap(), [255, 255, 255]);
+        assert_eq!(parse_bg("GRAY").unwrap(), [128, 128, 128]);
+        assert_eq!(parse_bg("40").unwrap(), [40, 40, 40]);
+        assert_eq!(parse_bg("#ff8800").unwrap(), [255, 136, 0]);
+        assert_eq!(parse_bg("#f80").unwrap(), [255, 136, 0]);
+        assert!(parse_bg("#ff88").is_err());
+        assert!(parse_bg("256").is_err());
+        assert!(parse_bg("chartreuse").is_err());
+        assert!(parse_opacity("0.5").is_ok());
+        assert!(parse_opacity("0").is_ok());
+        assert!(parse_opacity("1").is_ok());
+        assert!(parse_opacity("1.5").is_err());
+        assert!(parse_opacity("-0.1").is_err());
+        assert!(parse_opacity("x").is_err());
+    }
 
     #[test]
     fn focus_parsing() {
