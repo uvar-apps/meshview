@@ -87,7 +87,10 @@ pub struct CompareResult {
 }
 
 /// Render every mesh under one identical camera into a labelled contact sheet.
-pub fn render_compare(items: &[CompareItem], opts: &CompareOptions) -> Result<CompareResult, SheetError> {
+pub fn render_compare(
+    items: &[CompareItem],
+    opts: &CompareOptions,
+) -> Result<CompareResult, SheetError> {
     if items.is_empty() {
         return Err(SheetError::Empty);
     }
@@ -131,11 +134,7 @@ pub fn render_compare(items: &[CompareItem], opts: &CompareOptions) -> Result<Co
                 opts.size as u32,
                 FilterType::Lanczos3,
             ));
-            masks.push(downsample_mask(
-                &raster,
-                opts.size,
-                aa,
-            ));
+            masks.push(downsample_mask(&raster, opts.size, aa));
         }
     }
 
@@ -201,12 +200,24 @@ fn downsample_mask(raster: &raster::Raster, size: usize, aa: usize) -> GrayImage
 /// Deterministic PNG writer: fixed compression and filter settings, no
 /// metadata or time chunks, so identical inputs produce identical bytes.
 pub fn write_png_rgb(path: &str, img: &RgbImage) -> Result<(), SheetError> {
-    write_png(path, img.as_raw(), img.width(), img.height(), image::ExtendedColorType::Rgb8)
+    write_png(
+        path,
+        img.as_raw(),
+        img.width(),
+        img.height(),
+        image::ExtendedColorType::Rgb8,
+    )
 }
 
 /// Deterministic grayscale PNG writer. See [`write_png_rgb`].
 pub fn write_png_gray(path: &str, img: &GrayImage) -> Result<(), SheetError> {
-    write_png(path, img.as_raw(), img.width(), img.height(), image::ExtendedColorType::L8)
+    write_png(
+        path,
+        img.as_raw(),
+        img.width(),
+        img.height(),
+        image::ExtendedColorType::L8,
+    )
 }
 
 fn write_png(
@@ -226,7 +237,7 @@ fn write_png(
         image::codecs::png::CompressionType::Default,
         image::codecs::png::FilterType::Adaptive,
     );
-    encoder.write_image(data, width, height, color).map_err(|e| {
-        SheetError::Encode(format!("{path}: {e}"))
-    })
+    encoder
+        .write_image(data, width, height, color)
+        .map_err(|e| SheetError::Encode(format!("{path}: {e}")))
 }

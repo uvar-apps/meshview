@@ -108,7 +108,14 @@ pub const CELL_ADVANCE: usize = 6;
 
 /// Draw `text` onto an RGB image with its top-left at `(x, y)`. ASCII only;
 /// characters outside the atlas print as `?` so mis-encoding is visible.
-pub(crate) fn draw_text(img: &mut image::RgbImage, x: usize, y: usize, text: &str, color: image::Rgb<u8>, scale: usize) {
+pub(crate) fn draw_text(
+    img: &mut image::RgbImage,
+    x: usize,
+    y: usize,
+    text: &str,
+    color: image::Rgb<u8>,
+    scale: usize,
+) {
     let scale = scale.max(1);
     let mut pen = x;
     for ch in text.chars() {
@@ -129,7 +136,13 @@ pub(crate) fn draw_text(img: &mut image::RgbImage, x: usize, y: usize, text: &st
     }
 }
 
-fn fill_scale_rect(img: &mut image::RgbImage, x: usize, y: usize, color: image::Rgb<u8>, scale: usize) {
+fn fill_scale_rect(
+    img: &mut image::RgbImage,
+    x: usize,
+    y: usize,
+    color: image::Rgb<u8>,
+    scale: usize,
+) {
     for dy in 0..scale {
         let yy = y + dy;
         if yy >= img.height() as usize {

@@ -241,11 +241,13 @@ fn read_face(
     for tok in rest.split_whitespace() {
         let parts = tok.split('/').collect::<Vec<_>>();
         let head = parts.first().copied().unwrap_or("");
-        pos.push(head.parse::<i64>().map_err(|_| ObjError::BadNumber {
-            path: path.to_string(),
-            line: line_no,
-            got: tok.to_string(),
-        })? - 1);
+        pos.push(
+            head.parse::<i64>().map_err(|_| ObjError::BadNumber {
+                path: path.to_string(),
+                line: line_no,
+                got: tok.to_string(),
+            })? - 1,
+        );
         // `v//vn` and `v/vt/vn` carry a normal in parts[2]; `v` and
         // `v/vt` carry none — parts[1] is a texture index, never one.
         let mut n = -1;

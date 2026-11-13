@@ -56,7 +56,7 @@ pub mod sheet;
 
 pub use camera::Camera;
 pub use obj::{Mesh, ObjError, load_obj, load_obj_from_str};
-pub use raster::{RenderOptions, Raster, render};
+pub use raster::{Raster, RenderOptions, render};
 pub use sheet::{
     CompareItem, CompareOptions, CompareResult, SheetError, render_compare, write_png_gray,
     write_png_rgb,

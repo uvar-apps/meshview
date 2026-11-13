@@ -109,7 +109,9 @@ fn run(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
         return Err("no OBJ files given".into());
     }
     let focus = match &args.focus {
-        Some(text) => Some(parse_focus(text).ok_or(format!("--focus expects x,y,z, got `{text}`"))?),
+        Some(text) => {
+            Some(parse_focus(text).ok_or(format!("--focus expects x,y,z, got `{text}`"))?)
+        }
         None => None,
     };
     let mut loaded = Vec::with_capacity(args.meshes.len());
@@ -142,7 +144,10 @@ fn run(args: &Args) -> Result<(), Box<dyn std::error::Error>> {
     write_png_rgb(&args.out, &result.sheet)?;
     println!("wrote {}", args.out);
     if let Some(mask) = &args.mask {
-        for (mask_path, m) in mask_paths(mask, result.masks.len()).into_iter().zip(&result.masks) {
+        for (mask_path, m) in mask_paths(mask, result.masks.len())
+            .into_iter()
+            .zip(&result.masks)
+        {
             write_png_gray(&mask_path, m)?;
             println!("wrote {mask_path}");
         }
@@ -178,6 +183,9 @@ mod tests {
     fn mask_naming() {
         assert_eq!(mask_paths("m.png", 1), vec!["m.png".to_string()]);
         let two = mask_paths("out/mask.png", 2);
-        assert_eq!(two, vec!["out/mask_0.png".to_string(), "out/mask_1.png".to_string()]);
+        assert_eq!(
+            two,
+            vec!["out/mask_0.png".to_string(), "out/mask_1.png".to_string()]
+        );
     }
 }

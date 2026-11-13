@@ -76,7 +76,11 @@ impl Raster {
     /// The coverage mask as a grayscale image: 255 where geometry covers,
     /// 0 where there is no surface, independent of shading.
     pub fn mask_image(&self) -> image::GrayImage {
-        let data: Vec<u8> = self.covered.iter().map(|&c| if c { 255 } else { 0 }).collect();
+        let data: Vec<u8> = self
+            .covered
+            .iter()
+            .map(|&c| if c { 255 } else { 0 })
+            .collect();
         image::GrayImage::from_raw(self.size as u32, self.size as u32, data)
             .expect("buffer sized to dimensions")
     }
@@ -201,11 +205,8 @@ pub fn render(mesh: &Mesh, cam: &Camera, opts: &RenderOptions) -> Raster {
                 let nz = w1 * n1[2] + w2 * n2[2] + w0 * n0[2];
                 let nl = (nx * nx + ny * ny + nz * nz).sqrt();
                 let inv_n = 1.0 / nl.max(1e-12);
-                let shade = shade_two_sided_unit(
-                    [nx * inv_n, ny * inv_n, nz * inv_n],
-                    l,
-                    opts.ambient,
-                );
+                let shade =
+                    shade_two_sided_unit([nx * inv_n, ny * inv_n, nz * inv_n], l, opts.ambient);
                 img[idx] = (255.0 * shade).clamp(0.0, 255.0) as u8;
             }
         }
@@ -222,7 +223,11 @@ pub fn render(mesh: &Mesh, cam: &Camera, opts: &RenderOptions) -> Raster {
 #[inline]
 fn ceil_usize(x: f64) -> usize {
     let c = x.ceil();
-    if c <= 0.0 { 0 } else { c.min(u32::MAX as f64) as usize }
+    if c <= 0.0 {
+        0
+    } else {
+        c.min(u32::MAX as f64) as usize
+    }
 }
 
 /// Intersect the running integer span `[lo, hi]` with the half-line
@@ -264,7 +269,14 @@ mod tests {
             normals: vec![[0.0, 0.0, 1.0]],
             indices: vec![],
         };
-        let r = render(&mesh, &Camera::new([0.0; 3], 1.0), &RenderOptions { size: 0, ..Default::default() });
+        let r = render(
+            &mesh,
+            &Camera::new([0.0; 3], 1.0),
+            &RenderOptions {
+                size: 0,
+                ..Default::default()
+            },
+        );
         assert_eq!(r.size(), 0);
     }
 }

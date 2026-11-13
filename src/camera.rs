@@ -78,7 +78,10 @@ impl Camera {
     }
 
     pub fn matrix(&self) -> Mat3 {
-        mul(&mul(&rot_z(self.roll), &rot_y(self.yaw)), &rot_x(self.pitch))
+        mul(
+            &mul(&rot_z(self.roll), &rot_y(self.yaw)),
+            &rot_x(self.pitch),
+        )
     }
 
     /// Put `point` through the camera: `(x, y, depth)` in a `size`×`size` tile.
