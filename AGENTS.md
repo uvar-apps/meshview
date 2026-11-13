@@ -33,7 +33,7 @@ usable; breaking it forces a semver bump and coordination.
 * GitHub Releases: `v0.1.0` and `v0.2.0` (the latter marked Latest).
 * Toolchain: edition 2024, `rust-version = 1.85` (MSRV metadata; local
   toolchain is 1.100). Release profile uses `lto = true, codegen-units = 1`.
-* Dependencies: `clap` (derive), `image` (png only), `thiserror`, and
+* Dependencies: `clap` (derive), `image` (png + jpeg features), `thiserror`, and
   `objserde` — the OBJ parse + normal-binding engine since 0.2.1 (same author
   and MIT OR Apache-2.0 licence; behaviour verified byte-identical against the
   in-tree loader it replaced). Adding any other dependency is a deliberate
