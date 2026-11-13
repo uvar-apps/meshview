@@ -190,10 +190,11 @@ checksum = "a6cb138bb79a146c1bd460005623e142ef0181e3d0219cb493e02f7d08a35695"
 
 [[package]]
 name = "meshview"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "clap",
  "image",
+ "objserde",
  "thiserror",
 ]
 
@@ -235,6 +236,12 @@ checksum = "071dfc062690e90b734c0b2273ce72ad0ffa95f0c74596bc250dcfd960262841"
 dependencies = [
  "autocfg",
 ]
+
+[[package]]
+name = "objserde"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d9b27a9a5fbac059005761c0b61ed2dbfc1789a016e7a5c17641f5809660b641"
 
 [[package]]
 name = "once_cell_polyfill"

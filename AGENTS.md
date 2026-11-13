@@ -24,15 +24,20 @@ usable; breaking it forces a semver bump and coordination.
 
 ## Status (as of this commit)
 
-* Repo: `github.com/uvar-apps/meshview`, branch `main`, HEAD `17e8dd5`, clean.
+* Repo: `github.com/uvar-apps/meshview`, branch `main`. Crate version: local
+  `0.2.1` — an objserde-backed loader, **unreleased**; crates.io still serves
+  `0.2.0`, which embedded its own parser.
 * crates.io: **`meshview 0.2.0` published** (2026-11-13). This was the first
   ever crates.io release — `0.1.0` exists only as a git tag + GitHub Release.
   crates.io versions cannot be deleted, only yanked.
 * GitHub Releases: `v0.1.0` and `v0.2.0` (the latter marked Latest).
 * Toolchain: edition 2024, `rust-version = 1.85` (MSRV metadata; local
   toolchain is 1.100). Release profile uses `lto = true, codegen-units = 1`.
-* Dependencies: `clap` (derive), `image` (png only), `thiserror`. That is the
-  complete list — adding any dependency is a deliberate decision, see rules.
+* Dependencies: `clap` (derive), `image` (png only), `thiserror`, and
+  `objserde` — the OBJ parse + normal-binding engine since 0.2.1 (same author
+  and MIT OR Apache-2.0 licence; behaviour verified byte-identical against the
+  in-tree loader it replaced). Adding any other dependency is a deliberate
+  decision, see rules.
 * Tests: **35 green** (13 ported Python `selftest.py` property checks; 8
   loader/sample tests; 7 render/compositing integration tests; CLI e2e;
   `bg`/`focus`/mask-naming unit tests; font atlas; doctest).
@@ -68,8 +73,9 @@ assets/samples/1crn_ses_0.5A.obj -o out.png --zoom 110 --focus 4.29,5.05,4.55`.
 
 ```
 meshview (lib + bin)
-├── obj.rs       load_obj / load_obj_from_str → Mesh { positions, normals, indices }
-│                4 corner forms, vn-index binding (first wins), geometric fallback
+├── obj.rs       thin adapter over objserde (parse_file/parse + bind) →
+│                Mesh { positions, normals, indices }; keeps meshview's
+│                ObjError surface and Display strings stable for API + tests
 ├── camera.rs    orthographic Camera (focus, zoom, yaw·pitch·roll → M = Rz·Ry·Rx)
 │                project_point; project_mesh → (sx, sy, depth, nview)
 ├── shading.rs   view-space two-sided Lambert; DEFAULT_LIGHT (0.35,0.45,0.82),
@@ -128,7 +134,12 @@ These match the Python original (`/Users/ugo/projects/SES/tools/meshview/`,
 read-only — see Working rules). Deviating from any of them changes output;
 deviate only with a decision, a test, README documentation, and a semver bump.
 
-**Loader**
+**Loader** — since 0.2.1 these rules are executed by `objserde`
+(`parse*` + `bind`); the contract below is what meshview depends on. If
+objserde ever drifts from it, pin or patch the dependency — never fork the
+parsing logic back into this repo. objserde additionally models `vt`,
+`usemtl` and `mtllib`; meshview ignores them.
+
 * Lines starting exactly `v `, `vn `, `f ` only; everything else ignored
   gracefully. `v`/`vn` lines may carry extra trailing floats (vertex colors) —
   first three only.
@@ -247,7 +258,7 @@ yaw/pitch 0, bg black, bg-opacity 1.
   `cargo publish` requires a clean tree.
 * Gate before reporting done: `cargo fmt --check`, `cargo clippy --workspace
   --all-targets -- -D warnings`, `cargo test --release`.
-* Dependencies: stay minimal (clap/image/thiserror). No GPU crates, no
+* Dependencies: stay minimal (clap/image/thiserror/objserde). No GPU crates, no
   system-font dependency (labels must render headless and deterministically),
   no parallelism without the determinism argument above.
 * Scope creep guards: no perspective camera, no specular/AO/shadows, no

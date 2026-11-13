@@ -5,6 +5,10 @@ Load OBJ files, render each under one identical orthographic camera into a
 labelled contact-sheet PNG. No GPU, no window system, no interactivity, no
 scene graph.
 
+Since 0.2.1, OBJ parsing and normal binding come from
+[objserde](https://crates.io/crates/objserde) — the companion crate that also
+writes molses' `f i//i` meshes — so reader and generator cannot drift apart.
+
 It is the Rust port of a debug tool written for
 [molses](https://github.com/uvar-apps/molses)'s solvent-excluded-surface
 meshes, where the whole point is that the same world-space region of several
