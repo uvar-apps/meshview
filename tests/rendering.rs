@@ -212,6 +212,10 @@ fn crate_default_bg() -> [u8; 3] {
 // The mask PNG round-trips and agrees with the renderer's coverage.
 #[test]
 fn mask_png_round_trip() {
+    if !common::have("stanford-bunny.obj") {
+        eprintln!("skipping: stanford-bunny.obj not shipped with the crates.io package");
+        return;
+    }
     let mesh = load_obj(&sample("stanford-bunny.obj")).unwrap();
     let cam = Camera::new(mesh.centroid(), 2200.0);
     let r = render(

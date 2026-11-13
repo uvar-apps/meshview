@@ -87,3 +87,9 @@ pub fn enclosed_uncovered(covered: &meshview::Raster) -> usize {
 pub fn sample(name: &str) -> String {
     format!("{}/assets/samples/{name}", env!("CARGO_MANIFEST_DIR"),)
 }
+
+/// True when a sample asset exists. The crates.io package omits the Stanford
+/// scan models (research/educational license), so their tests skip there.
+pub fn have(name: &str) -> bool {
+    std::path::Path::new(&sample(name)).exists()
+}

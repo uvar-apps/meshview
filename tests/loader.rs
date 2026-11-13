@@ -9,6 +9,10 @@ use meshview::{ObjError, load_obj, load_obj_from_str};
 
 #[test]
 fn bunny_loads_with_exact_counts_and_unit_normals() {
+    if !common::have("stanford-bunny.obj") {
+        eprintln!("skipping: stanford-bunny.obj not shipped with the crates.io package");
+        return;
+    }
     let m = load_obj(&sample("stanford-bunny.obj")).unwrap();
     assert_eq!(m.vertex_count(), 35_947);
     assert_eq!(m.face_count(), 69_451);
@@ -34,6 +38,10 @@ fn bunny_loads_with_exact_counts_and_unit_normals() {
 
 #[test]
 fn dragon_loads_with_exact_counts_and_unit_normals() {
+    if !common::have("xyzrgb_dragon.obj") {
+        eprintln!("skipping: xyzrgb_dragon.obj not shipped with the crates.io package");
+        return;
+    }
     let m = load_obj(&sample("xyzrgb_dragon.obj")).unwrap();
     assert_eq!(m.vertex_count(), 125_066);
     assert_eq!(m.face_count(), 249_882);

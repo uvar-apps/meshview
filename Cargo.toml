@@ -10,6 +10,11 @@ repository = "https://github.com/uvar-apps/meshview"
 readme = "README.md"
 keywords = ["obj", "mesh", "rasterizer", "comparison", "orthographic"]
 categories = ["graphics", "rendering"]
+# The two Stanford scan models (research/educational license, Turk/Levoy) are
+# distributed via the GitHub repo only, not the crates.io package. The crambin
+# SES mesh (molses, MIT OR Apache-2.0, from the unrestricted PDB 1CRN) ships
+# so the published package still exercises the vn-binding path end to end.
+exclude = ["assets/samples/stanford-bunny.obj", "assets/samples/xyzrgb_dragon.obj"]
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
