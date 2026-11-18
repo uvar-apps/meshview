@@ -73,7 +73,7 @@ pub struct CompareItem<'a> {
     pub mesh: &'a Mesh,
 }
 
-/// One textured panel's input: a display name and a [`TexturedMesh`] from
+/// One textured panel's input: a display name and a [`TexturedMesh`](crate::TexturedMesh) from
 /// [`load_textured`](crate::load_textured).
 pub struct TexturedCompareItem<'a> {
     pub name: &'a str,
