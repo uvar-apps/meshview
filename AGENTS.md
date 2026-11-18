@@ -26,13 +26,22 @@ usable; breaking it forces a semver bump and coordination.
 
 * Repo: `github.com/uvar-apps/meshview`, branch `main`. Crate version:
   `0.3.0` — objserde-backed loader + opt-in textured mode; published to
-  crates.io and tagged/released on GitHub (2026-11-13).
+  crates.io and tagged/released on GitHub (2026-11-13). **`0.3.1` is
+  metadata-only**: the `authors` spelling was wrong ("Garetto") and
+  `rust-version` claimed 1.85, which the code never met — see Toolchain below.
 * crates.io: **`meshview 0.2.0` published** (2026-11-13). This was the first
   ever crates.io release — `0.1.0` exists only as a git tag + GitHub Release.
-  crates.io versions cannot be deleted, only yanked.
+  crates.io versions cannot be deleted, only yanked. The `authors` typo is
+  baked into the `0.1.0`–`0.3.0` tarballs and cannot be corrected there; a
+  newer version is the only fix, and it fixes only that version onward.
 * GitHub Releases: `v0.1.0` and `v0.2.0` (the latter marked Latest).
-* Toolchain: edition 2024, `rust-version = 1.85` (MSRV metadata; local
-  toolchain is 1.100). Release profile uses `lto = true, codegen-units = 1`.
+* Toolchain: edition 2024, `rust-version = 1.88`. **1.85 was never true**:
+  `src/sheet.rs` has a let-chain (`if let Some(labels) = … && …`), and
+  let-chains stabilised in 1.88. On 1.87 the compiler says
+  `error[E0658]` for it, and cargo separately refuses `image@0.25.10`, which
+  also requires 1.88. So 1.88 is the floor from two directions. Local
+  toolchain is 1.100; `cargo +1.88 check` is clean. Release profile uses
+  `lto = true, codegen-units = 1`.
 * Dependencies: `clap` (derive), `image` (png + jpeg features), `thiserror`, and
   `objserde` — the OBJ parse + normal-binding engine since 0.2.1 (same author
   and MIT OR Apache-2.0 licence; behaviour verified byte-identical against the
